@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ouroboros | Self-Banking</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+    <style>
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .card-success {
+            border-top: 4px solid #2ecc71;
+        }
+
+        .card-warning {
+            border-top: 4px solid #f39c12;
+        }
+
+        .chart-container {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+            height: 180px;
+            margin-top: 20px;
+            border-bottom: 2px solid #555;
+            padding-bottom: 5px;
+            overflow-x: auto;
+        }
+
+        .chart-bar-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            flex: 1;
+            min-width: 60px;
+        }
+
+        .chart-bar {
+            width: 100%;
+            max-width: 40px;
+            background-color: #2ecc71;
+            border-radius: 4px 4px 0 0;
+            transition: height 0.3s ease;
+        }
+
+        #installmentPreview table {
+            margin-top: 1rem;
+            font-size: 0.9em;
+        }
+
+        .loan-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <hgroup>
+            <h1>Ouroboros</h1>
+            <p>Seu próprio ciclo de crédito e patrimônio.</p>
+        </hgroup>
+
+        <!-- Sincronização -->
+        <article>
+            <header>Sincronização Manual</header>
+            <div class="grid">
+                <div>
+                    <label for="uploadJson">Carregar Backup (JSON)</label>
+                    <input type="file" id="uploadJson" accept=".json" />
+                </div>
+                <div>
+                    <label>&nbsp;</label>
+                    <button onclick="downloadJSON()" class="secondary">Salvar & Baixar Dados</button>
+                </div>
+            </div>
+        </article>
+
+        <!-- Painel Global -->
+        <div class="dashboard-grid">
+            <article class="card-warning">
+                <h5>Capital na Rua</h5>
+                <h2 id="totalPrincipal">R$ 0,00</h2>
+            </article>
+            <article class="card-success">
+                <h5>Lucro Ouroboros (Juros)</h5>
+                <h2 id="totalLucro">R$ 0,00</h2>
+            </article>
+        </div>
+
+        <!-- Gráfico de Fluxo de Caixa -->
+        <article>
+            <header>Fluxo de Caixa Mensal (O que você precisa pagar ao Ouroboros)</header>
+            <div id="graficoFluxo">
+                <p style="text-align: center; color: #888;">Nenhuma parcela pendente.</p>
+            </div>
+        </article>
+
+        <!-- Novo Empréstimo -->
+        <article>
+            <header>Novo Financiamento</header>
+            <form id="loanForm">
+                <div class="grid">
+                    <div>
+                        <label for="loanName">O que você está comprando?</label>
+                        <input type="text" id="loanName" placeholder="Ex: Teclado Mecânico" required />
+                    </div>
+                    <div>
+                        <label for="loanAmount">Valor à vista</label>
+                        <input type="number" step="0.01" id="loanAmount" placeholder="R$ 0,00" required />
+                    </div>
+                    <div>
+                        <label for="loanInstallments">Parcelas Escolhidas</label>
+                        <input type="number" id="loanInstallments" placeholder="Ex: 12" min="1" required />
+                    </div>
+                </div>
+
+                <!-- Preview Dinâmico de Parcelas -->
+                <div id="installmentPreview"></div>
+
+                <button type="submit" style="margin-top: 1rem;">Confirmar Empréstimo</button>
+            </form>
+        </article>
+
+        <!-- Lista de Empréstimos Ativos -->
+        <h3>Contratos Ativos</h3>
+        <section id="loansList">
+            <!-- Cards injetados via JS -->
+            <p style="text-align: center; color: #888;">Nenhum empréstimo ativo. Carregue seu arquivo ou crie um novo.
+            </p>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
