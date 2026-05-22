@@ -4,12 +4,13 @@ let db = { loans: [] };
 // Configurações do Ouroboros
 const TAXA_BASE = 0.05; // 5%
 const INCREMENTO_PARCELA = 0.005; // +0.5% por parcela extra
+const TAXA_CDI_MENSAL = 0.01; // ~1% ao mês (simulando 120% do CDI)
 
 // Formatador de Moeda
 const BRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
 // --------------------------------------------------
-// 1. Matemática do Ouroboros
+// 1. Matemática
 // --------------------------------------------------
 function calcularTaxa(n) {
     return TAXA_BASE + (INCREMENTO_PARCELA * (n - 1));
@@ -18,6 +19,11 @@ function calcularTaxa(n) {
 function calcularTabelaPrice(principal, taxa, parcelas) {
     if (taxa === 0) return principal / parcelas;
     return principal * (taxa * Math.pow(1 + taxa, parcelas)) / (Math.pow(1 + taxa, parcelas) - 1);
+}
+
+function calcularRendimentoCDI(principal, meses) {
+    // Calcula quanto o dinheiro renderia se ficasse parado no CDI
+    return principal * (Math.pow(1 + TAXA_CDI_MENSAL, meses) - 1);
 }
 
 // --------------------------------------------------
@@ -37,9 +43,9 @@ document.getElementById('loanAmount').addEventListener('input', function(e) {
             <thead>
                 <tr>
                     <th>Vezes</th>
-                    <th>Taxa a.m.</th>
-                    <th>Valor da Parcela</th>
+                    <th>Parcela</th>
                     <th>Lucro Ouroboros</th>
+                    <th>CDI Perdido (120%)</th>
                 </tr>
             </thead>
             <tbody>
@@ -48,14 +54,15 @@ document.getElementById('loanAmount').addEventListener('input', function(e) {
     for (let i = 1; i <= 12; i++) {
         const taxa = calcularTaxa(i);
         const pmt = calcularTabelaPrice(amount, taxa, i);
-        const lucro = (pmt * i) - amount;
+        const lucroOuroboros = (pmt * i) - amount;
+        const lucroCDI = calcularRendimentoCDI(amount, i);
         
         tableHtml += `
             <tr>
                 <td>${i}x</td>
-                <td>${(taxa * 100).toFixed(1)}%</td>
                 <td>${BRL.format(pmt)}</td>
-                <td style="color: #2ecc71;"><strong>${BRL.format(lucro)}</strong></td>
+                <td style="color: #2ecc71;"><strong>${BRL.format(lucroOuroboros)}</strong></td>
+                <td style="color: #f39c12;">${BRL.format(lucroCDI)}</td>
             </tr>
         `;
     }
@@ -74,6 +81,7 @@ document.getElementById('loanForm').addEventListener('submit', function(e) {
     const valorParcela = calcularTabelaPrice(amount, taxaAplicada, installments);
     const totalPago = valorParcela * installments;
     const lucro = totalPago - amount;
+    const lucroCDI = calcularRendimentoCDI(amount, installments);
 
     const novoEmprestimo = {
         id: Date.now(),
@@ -84,6 +92,7 @@ document.getElementById('loanForm').addEventListener('submit', function(e) {
         valorParcela,
         totalPago,
         lucro,
+        lucroCDI, // Salva o CDI perdido para o histórico
         parcelasPagas: 0,
         dataCriacao: new Date().toISOString(),
         historicoPagamentos: []
@@ -92,16 +101,13 @@ document.getElementById('loanForm').addEventListener('submit', function(e) {
     db.loans.push(novoEmprestimo);
     renderDashboard();
     
-    // Limpa formulário
     this.reset();
     document.getElementById('installmentPreview').innerHTML = '';
-    
-    // Rola para ver o novo contrato
     document.getElementById('loansList').scrollIntoView({ behavior: 'smooth' });
 });
 
 // --------------------------------------------------
-// 3. Ações do Contrato (Pagar Parcela & Exportar Calendário)
+// 3. Ações do Contrato (Pagar & Exportar)
 // --------------------------------------------------
 function pagarParcela(loanId) {
     const loan = db.loans.find(l => l.id === loanId);
@@ -119,24 +125,20 @@ function pagarParcela(loanId) {
 function baixarCalendario(loanId) {
     const loan = db.loans.find(l => l.id === loanId);
     let icsContent = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Ouroboros//Self-Banking//PT\n";
-    
     let dataCriacao = new Date(loan.dataCriacao);
     
     for (let i = 1; i <= loan.installments; i++) {
-        // Fixação temporal: cria a data exata da parcela somando 'i' meses à data de criação
         let dataParcela = new Date(dataCriacao);
         dataParcela.setMonth(dataCriacao.getMonth() + i);
         
         let dtStart = dataParcela.toISOString().replace(/[-:]/g, '').split('.')[0] + "Z";
-        let dtEnd = dtStart; // Evento do dia inteiro
         
         icsContent += "BEGIN:VEVENT\n";
         icsContent += `UID:${loan.id}-${i}@ouroboros\n`;
         icsContent += `DTSTAMP:${dtStart}\n`;
         icsContent += `DTSTART:${dtStart}\n`;
-        icsContent += `DTEND:${dtEnd}\n`;
         icsContent += `SUMMARY:Ouroboros: ${loan.name} (${i}/${loan.installments})\n`;
-        icsContent += `DESCRIPTION:Valor a repor no Pé de Meia: ${BRL.format(loan.valorParcela)}\n`;
+        icsContent += `DESCRIPTION:Valor a repor: ${BRL.format(loan.valorParcela)}\n`;
         icsContent += "END:VEVENT\n";
     }
     icsContent += "END:VCALENDAR";
@@ -149,7 +151,7 @@ function baixarCalendario(loanId) {
 }
 
 // --------------------------------------------------
-// 4. I/O de Dados (Backup Manual JSON)
+// 4. I/O de Dados (Backup)
 // --------------------------------------------------
 function downloadJSON() {
     if (db.loans.length === 0) {
@@ -214,7 +216,7 @@ function renderizarGraficoFluxo() {
     
     mesesOrdenados.forEach(mes => {
         const valor = fluxoMensal[mes];
-        const percentAltura = Math.max((valor / maxValor) * 100, 5); // min 5% para a barra não sumir
+        const percentAltura = Math.max((valor / maxValor) * 100, 5); 
         
         const [ano, numMes] = mes.split('-');
         const nomeMes = new Date(ano, parseInt(numMes) - 1).toLocaleString('pt-BR', { month: 'short', year: '2-digit' });
@@ -242,13 +244,15 @@ function renderDashboard() {
         list.innerHTML = '<p style="text-align: center; color: #888;">Nenhum empréstimo ativo.</p>';
     } else {
         db.loans.forEach(loan => {
-            // Conta os totais globais
             totalPrincipal += loan.amount;
             totalLucro += loan.lucro;
 
             const pRestantes = loan.installments - loan.parcelasPagas;
             const progress = (loan.parcelasPagas / loan.installments) * 100;
             const isQuitado = pRestantes === 0;
+            
+            // Fallback caso carregue um JSON antigo que não tinha o lucroCDI
+            const cdi = loan.lucroCDI || calcularRendimentoCDI(loan.amount, loan.installments);
 
             list.innerHTML += `
                 <article style="${isQuitado ? 'opacity: 0.7;' : ''}">
@@ -262,22 +266,23 @@ function renderDashboard() {
                             <br><strong>${BRL.format(loan.amount)}</strong>
                         </div>
                         <div>
-                            <small>Lucro Gerado</small>
+                            <small>Lucro Ouroboros</small>
                             <br><strong style="color: #2ecc71;">${BRL.format(loan.lucro)}</strong>
                         </div>
                         <div>
-                            <small>Status</small>
-                            <br><strong>${loan.parcelasPagas} de ${loan.installments} pagas</strong>
+                            <small>CDI Perdido</small>
+                            <br><strong style="color: #f39c12;">${BRL.format(cdi)}</strong>
                         </div>
                     </div>
                     
                     <div style="margin-top: 1rem;">
+                        <small style="display:block; margin-bottom:0.5rem;">Status: ${loan.parcelasPagas} de ${loan.installments} pagas</small>
                         <progress value="${progress}" max="100"></progress>
                     </div>
 
                     <footer class="loan-actions">
                         <button class="primary" onclick="pagarParcela(${loan.id})" ${isQuitado ? 'disabled' : ''}>
-                            ✔️ Pagar Parcela ${isQuitado ? '' : `(${BRL.format(loan.valorParcela)})`}
+                            ✔️ Pagar ${isQuitado ? '' : `(${BRL.format(loan.valorParcela)})`}
                         </button>
                         <button class="outline" onclick="baixarCalendario(${loan.id})">
                             📅 Exportar Lembretes
@@ -294,5 +299,4 @@ function renderDashboard() {
     renderizarGraficoFluxo();
 }
 
-// Inicializa a tela vazia
 renderDashboard();
